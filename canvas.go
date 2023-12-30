@@ -684,27 +684,46 @@ func (c *Context) DrawText(x, y float64, text *Text) {
 	c.RenderText(text, m)
 }
 
-// DrawImage draws an image at position (x,y) using the current draw state and the given resolution in pixels-per-millimeter. A higher resolution will draw a smaller image (ie. more image pixels per millimeter of document).
 func (c *Context) DrawImage(x, y float64, img image.Image, resolution Resolution) {
 	if img.Bounds().Size().Eq(image.Point{}) {
 		return
 	}
 
-	coord := c.coord(x, y)
-	m := Identity.Translate(coord.X, coord.Y)
-	if c.coordSystem == CartesianIII || c.coordSystem == CartesianIV {
-		m = m.ReflectY()
+	// var coord Point
+	// if c.coordSystem == CartesianI {
+	// 	coord = c.coordView.Dot(Point{x, y})
+	// } else if c.coordSystem == CartesianIV {
+	// 	coord = Identity.ReflectYAbout(c.Height() / 2.0).Mul(c.coordView).Dot(Point{x, y})
+	// }
+	// m := c.view.Translate(coord.X, coord.Y).Scale(1.0/resolution.DPMM(), 1.0/resolution.DPMM())
+	// if c.coordSystem == CartesianIV {
+	// 	m = m.Translate(0.0, -float64(img.Bounds().Size().Y))
+	// }
+
+	// var coord Point
+	// if c.coordSystem == CartesianI {
+	// 	coord = c.coordView.Dot(Point{x, y})
+	// } else if c.coordSystem == CartesianIV {
+	// 	coord = Identity.ReflectYAbout(c.Height() / 2.0).Mul(c.coordView).Dot(Point{x, y})
+	// 	tX, tY := c.view.Pos()
+	// 	coord = coord.Add(Point{tX, -tY * 2})
+	// }
+	// fmt.Println(coord.Y)
+	// m := Identity.Translate(coord.X, coord.Y).Mul(c.view).Scale(1.0/resolution.DPMM(), 1.0/resolution.DPMM())
+	// if c.coordSystem == CartesianI {
+	// 	m = m.Translate(0.0, -float64(img.Bounds().Size().Y))
+	// }
+
+	coord := c.coordView.Dot(Point{x, y})
+	m := Identity
+	if c.coordSystem == CartesianIV {
+		m = m.ReflectYAbout(c.Height() / 2.0)
 	}
-	if c.coordSystem == CartesianII || c.coordSystem == CartesianIII {
-		m = m.ReflectX()
+	m = m.Mul(c.view).Translate(coord.X, coord.Y).Scale(1.0/resolution.DPMM(), 1.0/resolution.DPMM())
+	if c.coordSystem == CartesianIV {
+		m = m.ReflectYAbout(0).Translate(0, -float64(img.Bounds().Size().Y))
 	}
-	m = m.Mul(c.view).Scale(1.0/resolution.DPMM(), 1.0/resolution.DPMM())
-	if c.coordSystem == CartesianIII || c.coordSystem == CartesianIV {
-		m = m.ReflectYAbout(float64(img.Bounds().Size().Y) / 2.0)
-	}
-	if c.coordSystem == CartesianII || c.coordSystem == CartesianIII {
-		m = m.ReflectXAbout(float64(img.Bounds().Size().X) / 2.0)
-	}
+
 	c.RenderImage(img, m)
 }
 

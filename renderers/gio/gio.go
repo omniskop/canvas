@@ -3,6 +3,7 @@ package gio
 import (
 	"image"
 	"image/color"
+	"math"
 
 	"gioui.org/f32"
 	"gioui.org/layout"
@@ -121,6 +122,84 @@ func (r *Gio) renderPath(path *canvas.Path, fill canvas.Paint) {
 			linearGradient.Add(r.ops)
 			paint.PaintOp{}.Add(r.ops)
 		}
+	}
+}
+
+/*
+rx, ry, rot, large, sweep := scanner.Arc()
+			rot = (rot / 360) * 2 * math.Pi // convert from degrees to radiants
+			center, _, radiusDelta := convertEllipse(scanner.Start(), scanner.End(), rx, ry, rot, large, sweep)
+
+			centerToFocal := math.Sqrt(rx*rx - ry*ry)
+			f1 := movePointInDirection(center, rot, centerToFocal)
+			f2 := movePointInDirection(center, rot, -centerToFocal)
+
+			p.ArcTo(r.point(f2), r.point(f1), float32(-radiusDelta))
+*/
+
+// convertEllipse takes parameters describing an ellipse in 'endpoint parameterization' and converts it to a 'center parameterization'.
+// This was mainly taken from https://www.w3.org/TR/SVG/implnote.html#ArcConversionEndpointToCenter and https://gist.github.com/balint42/fdb1d7d2e16fe11ac785.
+// The rotation must be in *radiants*.
+func convertEllipse(start canvas.Point, end canvas.Point, rx, ry, rot float64, large, sweep bool) (center canvas.Point, startRadius, deltaRadius float64) {
+	// source: https://www.w3.org/TR/SVG/implnote.html#ArcConversionEndpointToCenter
+
+	// function for calculating angle between two vectors
+	angle := func(u, v canvas.Point) float64 {
+		var sign float64 = -1
+		if (u.X*v.Y - u.Y*v.X) > 0 {
+			sign = 1
+		}
+		return sign * math.Acos(
+			(u.X*v.X+u.Y*v.Y)/
+				(math.Sqrt(u.X*u.X+u.Y*u.Y)*math.Sqrt(u.X*u.X+u.Y*u.Y)),
+		)
+	}
+
+	// sanitize input
+	rot = math.Mod(rot, math.Pi*2)
+	rx = math.Abs(rx)
+	ry = math.Abs(ry)
+
+	// Step 1:
+	// Calculate vector from end point to middle between start end end.
+	middle := canvas.Point{(start.X - end.X) / 2, (start.Y - end.Y) / 2}
+	// Rotate that vector by -rot.
+	cosRot := math.Cos(rot) // x component of rotation
+	sinRot := math.Sin(rot) // y component of rotation
+	x := cosRot*middle.X + sinRot*middle.Y
+	y := -1*sinRot*middle.X + cosRot*middle.Y
+	// Step 2: calculate center point relative to the middle point.
+	var rx2 = rx * rx
+	var ry2 = ry * ry
+	var x2 = x * x
+	var y2 = y * y
+	var sign float64 = 1
+	if large == sweep {
+		sign = -1
+	}
+	var fr = sign * math.Sqrt(
+		(rx2*(ry2-y2)-ry2*x2)/
+			(rx2*y2+ry2*x2),
+	)
+	var xt = fr * rx * y / ry
+	var yt = -1 * fr * ry * x / rx
+
+	// Step 3: Reverse rotation and convert relative to absolute coordinates.
+	var cx = cosRot*xt - sinRot*yt + (start.X+end.X)/2
+	var cy = sinRot*xt + cosRot*yt + (start.Y+end.Y)/2
+
+	// Step 4: calculate angles
+	var vt = canvas.Point{X: (x - xt) / rx, Y: (y - yt) / ry}
+	var phi1 = angle(canvas.Point{X: 1, Y: 0}, vt)
+	var phiD = math.Mod(angle(vt, canvas.Point{X: (-x - xt) / rx, Y: (-y - yt) / ry}), math.Pi*2)
+
+	return canvas.Point{X: cx, Y: cy}, phi1, phiD
+}
+
+func movePointInDirection(p canvas.Point, angle float64, distance float64) canvas.Point {
+	return canvas.Point{
+		p.X + math.Cos(angle)*distance,
+		p.Y * math.Sin(angle) * distance,
 	}
 }
 
